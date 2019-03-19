@@ -1,0 +1,355 @@
+openapi: '3.0.2'
+
+
+info:
+  title: Geographic Features Service API
+  description: Retrieve and store geographic features.
+  version: '0.1'
+
+
+servers:
+  - url: http://localhost:5000
+    description: Local dev server
+
+
+tags:
+  - name: Features
+    description: |
+      For the moment, we are using [GeoJSON](http://geojson.org/)
+      (see also [Wikipedia](https://en.wikipedia.org/wiki/GeoJSON))
+      as the model of what "feature" should mean.
+      In particular, we are thinking
+      that a feature in this service corresponds to a single GeoJSON object.
+      However, note that GeoJSON objects can contain collections of simpler
+      features such as polygons. This identification of service feature with
+      GeoJSON object is subject to revision as this service is developed.
+
+      Questions:
+
+      1. What data formats should be supported?
+         1. This will be driven in part by what data formats our (PCIC)
+            client apps like to consume.
+         1. GeoJSON? This is also a natural internal storage format.
+         1. WKT?
+         1. Others?
+
+
+paths:
+  /features:
+    get:
+      summary: List all features.
+      description: Get a list of descriptions (metadata) of all features.
+      tags:
+        - Features
+        # TODO: Search parameters
+#      parameters:
+#        - name:
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureList'
+    post:
+      summary: Create a new feature.
+      tags:
+        - Features
+      requestBody:
+        description: Metadata and content defining the feature.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureCreate'
+      responses:
+        201:
+          description: Created
+
+  /features/{id}:
+    get:
+      summary: Get details of a single feature.
+      description: |
+        Get full metadata describing a feature.
+        Does not include feature geospatial content.
+      tags:
+        - Features
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureMetadata'
+        404:
+          $ref: '#/components/responses/404NotFound'
+
+  /features/{id}/content:
+    get:
+      summary: Get content of a single feature.
+      description: Get full geospatial definition of a feature. This does not include metadata.
+      tags:
+        - Features
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        200:
+          description: Success
+          content:
+            # For applicable content types, see https://www.iana.org/assignments/media-types/media-types.xhtml
+            # Unfortunately, it isn't very helpful
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoJSON'
+            application/vnd.pacificclimate.wkt:
+              schema:
+                $ref: '#/components/schemas/WKT'
+        404:
+          $ref: '#/components/responses/404NotFound'
+
+
+components:
+  parameters:
+    id:
+      description: Unique id of resource
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    404NotFound:
+      description: The specified resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: '404'
+            message: Resource not found
+
+  schemas:
+
+    Hyperlink:
+      description: Annotated hypermedia link to a related resource
+      type: object
+      properties:
+        rel:
+          type: string
+        uri:
+          type: string
+      required:
+        - rel
+        - uri
+
+    HyperlinkList:
+      description: List of annotated hypermedia links to related resources
+      type: array
+      items:
+        $ref: '#/components/schemas/Hyperlink'
+
+    Hyperlinks:
+      description: Standard property in representations that holds hypermedia links
+      type: object
+      properties:
+        links:
+          $ref: '#/components/schemas/HyperlinkList'
+      required:
+        - links
+
+    # Response schemas
+
+    ErrorResponse:
+      description: Generic error response body
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message
+      example:
+        code: '404'
+        message: Message giving details of problem
+
+    # Coordinates
+
+    Coordinate:
+      # Factoring this out as it seems it could be used in multiple places.
+      description: Geospatial coordinates of a single location.
+      type: object
+      properties:
+        lon:
+          description: Latitude
+          type: number
+        lat:
+          description: Latitude
+          type: number
+        elevation:
+          description: Elevation
+          type: number
+      required:
+        - lat
+        - lon
+
+    # Features
+
+    FeatureMetadataXClient:
+      description: |
+        Client-specified metadata describing a feature.
+        This metadata, and only this metadata, is provided by the client
+        when creating a new resource.
+      type: object
+      properties:
+        short_name:
+          description: Short name or abbreviation for this feature.
+          type: string
+        long_name:
+          description: Long name for this feature.
+          type: string
+        description:
+          description: Description or other elaboration of feature's identity.
+          type: string
+      required:
+        - short_name
+        - long_name
+      example:
+        short_name: CRD
+        long_name: Capital Regional District
+        description: Boundary of the Regional District encompassing Greater Victoria and outlying areas.
+
+    FeatureMetadataXService:
+      description: |
+        Service-specified metadata for a feature.
+        This metadata is determined by the service, and cannot be specified
+        by the client.
+      type: object
+      properties:
+        id:
+          description: Unique internal id of feature.
+          type: string
+        centroid:
+          description: Centroid of feature (if applicable)
+          $ref: '#/components/schemas/Coordinate'
+        links:
+          description: Hyperlinks to related resources
+          $ref: '#/components/schemas/HyperlinkList'
+      required:
+        - id
+        - links
+      example:
+        id: 1
+        centroid:
+          lon: -123.5
+          lat: 50.0
+        links:
+          - rel: self
+            uri: /features/1
+          - rel: content
+            uri: /features/1/content
+
+    GeoJSON:
+      description: A GeoJSON object defining the geospatial content of a feature.
+      type: object
+      example:
+        # Actual content of this object is subject to debate and change.
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [100.0, 0.0], [101.0, 0.0], [101.0, 1.0],
+                [100.0, 1.0], [100.0, 0.0]
+              ]
+            ]
+          },
+          "properties": {
+            "prop0": "value0",
+            "prop1": { "this": "that" }
+          }
+        }
+
+    WKT:
+      description: A Well-Known Text (WKT) object defining the the geospatial content of a feature.
+      type: string
+      example:
+        WKT foo bar baz
+
+    FeatureMetadata:
+      description: Content of a single feature resource.
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/FeatureMetadataXClient'
+        - $ref: '#/components/schemas/FeatureMetadataXService'
+
+    FeatureContentCommon:
+      type: object
+      required:
+        - format
+      properties:
+        format:
+          type: string
+
+    FeatureContentGeoJSON:
+      allOf:
+        - $ref: '#/components/schemas/FeatureContentCommon'
+        - type: object
+          properties:
+            value:
+              $ref: '#/components/schemas/GeoJSON'
+      example:
+        format: GeoJSON
+        value:
+          frog: jump
+
+    FeatureContentWKT:
+      allOf:
+        - $ref: '#/components/schemas/FeatureContentCommon'
+        - type: object
+          properties:
+            value:
+              $ref: '#/components/schemas/WKT'
+      example:
+        format: WKT
+        value: 'Amazing WKT string'
+
+    FeatureContent:
+      description: Feature content specification
+      oneOf:
+        - $ref: '#/components/schemas/FeatureContentGeoJSON'
+        - $ref: '#/components/schemas/FeatureContentWKT'
+      discriminator:
+        propertyName: format
+      example:
+        format: GeoJSON
+        value:
+          foo: 'bar'
+
+    FeatureCreate:
+      description: Request body for creating a feature.
+      type: object
+      properties:
+        metadata:
+          $ref: '#/components/schemas/FeatureMetadataXClient'
+        content:
+          $ref: '#/components/schemas/FeatureContent'
+
+    FeatureListItem:
+      description: |
+        Content of a list item in a summary list of features
+        (e.g., as listed by /features).
+      # In principle, this can be different than Feature, but at this point
+      # is identical. Hence:
+      $ref: '#/components/schemas/FeatureMetadata'
+
+    FeatureList:
+      description: Summary list of features.
+      type: array
+      items:
+        $ref: '#/components/schemas/FeatureListItem'
