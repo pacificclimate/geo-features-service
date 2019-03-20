@@ -3,8 +3,25 @@ openapi: '3.0.2'
 
 info:
   title: Geographic Features Service API
-  description: Retrieve and store geographic features.
-  version: '0.1'
+  description: |
+    Retrieve and store geographic features.
+
+    This version of the service:
+    - assigns ownership of features to users
+    - assigns status public or private to a feature
+
+    Only the owner of a private feature can access (including read) that feature.
+
+    A client (app) can be:
+    - not logged in:
+       - all public features are read-accessible
+    - logged in as a user:
+       - all public features are read-accessible
+       - all features, public and private, owned by the user are fully (CRUD) accessible
+
+    User is a new entity, and of course it introduces the complex topic of
+    security.
+  version: '0.2.0'
 
 
 servers:
@@ -37,8 +54,8 @@ tags:
 paths:
   /features:
     get:
-      summary: List all features.
-      description: Get a list of descriptions (metadata) of all features.
+      summary: List all features that the client has access to.
+      description: Get a list of descriptions (metadata) of all features that the client has access to.
       tags:
         - Features
         # TODO: Search parameters
@@ -51,8 +68,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FeatureList'
+
     post:
-      summary: Create a new feature.
+      summary: Create a new feature owned by the logged-in client.
       tags:
         - Features
       requestBody:
